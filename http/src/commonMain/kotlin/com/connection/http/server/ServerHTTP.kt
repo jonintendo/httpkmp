@@ -23,7 +23,11 @@ class ServerHTTP(
     portNumber: Int,
     listener: HttpServerListener
 ) {
-    var frameFlow: MutableSharedFlow<String>? = null
+    var cameraFrameFlow: MutableSharedFlow<String>? = null
+    var cameraPositionFlow: MutableSharedFlow<String>? = null
+    var droneFrameFlow: MutableSharedFlow<String>? = null
+    var droneEventFlow: MutableSharedFlow<String>? = null
+    var dronePositionFlow: MutableSharedFlow<String>? = null
     var running = false
 
 
@@ -72,8 +76,36 @@ class ServerHTTP(
                     }
                 }
 
+//                get("/sse") {
+//                    println("ENTRANDO NO SSE")
+//
+//                    val heartBeatFlow: Flow<SseEvent> = flow {
+//                        while (true) {
+//                            emit(SseEvent("heartBeat"))
+//                            delay(25_000)
+//                        }
+//                    }
+//
+//                    val eventFlow: Flow<SseEvent> = flow {
+//
+//                        frameFlow?.collect { frame ->
+//                            emit(
+//                                SseEvent(
+//                                    event = "frame",
+//                                    data = frame
+//                                )
+//                            )
+//                        }
+//
+//                    }
+//
+//                    call.streamSse(merge(heartBeatFlow, eventFlow))
+//                    //call.streamSse(merge(heartBeatFlow))
+//                    println("SAINDO DO SSE")
+//                }
+
                 get("/sse") {
-                    println("ENTRANDO NO SSE")
+                    println( "ENTRANDO NO SSE")
 
                     val heartBeatFlow: Flow<SseEvent> = flow {
                         while (true) {
@@ -82,12 +114,12 @@ class ServerHTTP(
                         }
                     }
 
-                    val eventFlow: Flow<SseEvent> = flow {
+                    val cFrameFlow: Flow<SseEvent> = flow {
 
-                        frameFlow?.collect { frame ->
+                        cameraFrameFlow?.collect { frame ->
                             emit(
                                 SseEvent(
-                                    event = "frame",
+                                    event = "cameraFrame",
                                     data = frame
                                 )
                             )
@@ -95,9 +127,56 @@ class ServerHTTP(
 
                     }
 
-                    call.streamSse(merge(heartBeatFlow, eventFlow))
+                    val cPositionFlow: Flow<SseEvent> = flow {
+
+                        cameraPositionFlow?.collect { frame ->
+                            emit(
+                                SseEvent(
+                                    event = "cameraPosition",
+                                    data = frame
+                                )
+                            )
+                        }
+
+                    }
+
+
+                    val dEventFlow: Flow<SseEvent> = flow {
+                        droneEventFlow?.collect { event ->
+                            emit(
+                                SseEvent(
+                                    event = "droneEvent",
+                                    data = event
+                                )
+                            )
+                        }
+                    }
+
+                    val dFrameFlow: Flow<SseEvent> = flow {
+                        droneFrameFlow?.collect { frame ->
+                            emit(
+                                SseEvent(
+                                    event = "droneFrame",
+                                    data = frame
+                                )
+                            )
+                        }
+                    }
+
+                    val dPositionFlow: Flow<SseEvent> = flow {
+                        dronePositionFlow?.collect { position ->
+                            emit(
+                                SseEvent(
+                                    event = "dronePosition",
+                                    data = position
+                                )
+                            )
+                        }
+                    }
+
+                    call.streamSse(merge(heartBeatFlow, cFrameFlow,cPositionFlow, dEventFlow, dFrameFlow,dPositionFlow))
                     //call.streamSse(merge(heartBeatFlow))
-                    println("SAINDO DO SSE")
+                    println( "SAINDO DO SSE")
                 }
 
             }

@@ -30,7 +30,24 @@ class ServerViewModel : ViewModel(),
     )
 
 
-    private var frameFlow = MutableSharedFlow<String>(
+
+    private var cameraFrameFlow = MutableSharedFlow<String>(
+        extraBufferCapacity = 1
+    )
+
+    private var cameraPositionFlow = MutableSharedFlow<String>(
+        extraBufferCapacity = 1
+    )
+
+    private var droneFrameFlow = MutableSharedFlow<String>(
+        extraBufferCapacity = 1
+    )
+
+    private var droneEventFlow = MutableSharedFlow<String>(
+        extraBufferCapacity = 1
+    )
+
+    private var dronePositionFlow = MutableSharedFlow<String>(
         extraBufferCapacity = 1
     )
 
@@ -38,7 +55,11 @@ class ServerViewModel : ViewModel(),
        if( _server == null) {
            _server = ServerHTTP(7733, this)
        }
-        _server!!.frameFlow = frameFlow
+        _server!!.cameraFrameFlow = cameraFrameFlow
+        _server!!.cameraPositionFlow = cameraPositionFlow
+        _server!!.droneFrameFlow = droneFrameFlow
+        _server!!.droneEventFlow = droneEventFlow
+        _server!!.dronePositionFlow = dronePositionFlow
         onStartCommand()
         println("BackgroundTaskService is ready to conquer!")
 
