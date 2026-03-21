@@ -20,33 +20,17 @@ import androidx.compose.ui.unit.dp
 fun ServerView(viewModel: ServerViewModel) {
 
     val serverState by viewModel.serverState.collectAsState()
-
-    val getRequest by viewModel.returnGetState.collectAsState()
     val postRequest by viewModel.returnPostState.collectAsState()
 
 
     var address by remember { mutableStateOf("") }
-//    LaunchedEffect(null) {
-//        val interfaces = withContext(Dispatchers.IO) {
-//            NetworkInterface.getNetworkInterfaces()
-//        }
-//
-//        for (iface in interfaces) {
-//            for (addr in iface.inetAddresses) {
-//                if (!addr.isLoopbackAddress && addr is Inet4Address) {
-//                    address = addr.hostAddress as String
-//                    return@LaunchedEffect
-//                }
-//            }
-//        }
-//    }
+
 
     Row(modifier = Modifier.padding(top = 50.dp)) {
         Text("Meu IP: $address")
     }
 
     Text("Status da conexao: $serverState")
-    Text("Get Request: $getRequest")
     Text("Post Request: $postRequest")
 
     Column() {
@@ -64,6 +48,21 @@ fun ServerView(viewModel: ServerViewModel) {
         }) {
             Text(text = " Stop Service")
         }
+
+        Button(onClick = {
+            //stopService(serviceIntent)
+            viewModel.addListener()
+        }) {
+            Text(text = " Add Myself listener")
+        }
+
+        Button(onClick = {
+            //stopService(serviceIntent)
+            viewModel.removeListener()
+        }) {
+            Text(text = " Remove Myself listener")
+        }
+
     }
 
 }

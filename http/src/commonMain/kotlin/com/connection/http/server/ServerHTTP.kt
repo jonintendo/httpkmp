@@ -1,8 +1,11 @@
 package com.connection.http.server
 
+import androidx.compose.runtime.mutableStateOf
 import com.connection.http.SseEvent
 import com.connection.http.TiposComandos
+import com.connection.http.TiposConexao
 import com.connection.http.User
+
 
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -14,23 +17,51 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 
 class ServerHTTP(
-    portNumber: Int,
-    listener: HttpServerListener
+    private val portNumber: Int,
+    private val scope: CoroutineScope,
 ) {
-    var cameraFrameFlow: MutableSharedFlow<String>? = null
-    var cameraPositionFlow: MutableSharedFlow<String>? = null
-    var droneFrameFlow: MutableSharedFlow<String>? = null
-    var droneEventFlow: MutableSharedFlow<String>? = null
-    var dronePositionFlow: MutableSharedFlow<String>? = null
-    var running = false
+
+    private var vv: MutableList<Flow<SseEvent>> = mutableListOf()
+    private var running = false
+
+    var serverStateFlow = MutableStateFlow(TiposConexao.Disconnected)
+    var eventsToSendFlow: MutableList<MutableSharedFlow<SseEvent>> = mutableListOf()
+    fun addEventSharedFlow(eventReceivedFlow: MutableSharedFlow<SseEvent>) {
+        eventsToSendFlow.add(eventReceivedFlow)
+    }
+    fun removeEventSharedFlow(eventReceivedFlow: MutableSharedFlow<SseEvent>) {
+        eventsToSendFlow.add(eventReceivedFlow)
+    }
 
 
+    private var listeners = mutableListOf<HttpServerListener>()
+    fun addListener(listener: HttpServerListener) {
+        listeners.add(listener)
+    }
+
+    fun removeListener(listener: HttpServerListener) {
+        listeners.remove(listener)
+    }
+
+    private fun onPostCommand(command: TiposComandos) {
+        listeners.forEach { listener ->
+            listener.onPostCommand(command)
+        }
+    }
+
+    @OptIn(ExperimentalTime::class)
     private val instance by lazy {
 
         embeddedServer(CIO, portNumber) {
@@ -42,7 +73,8 @@ class ServerHTTP(
                     isLenient = true
                 })
             }
-
+            running = true
+            serverStateFlow.value= TiposConexao.Connected
             routing {
                 get("/") {
                     call.respondText("Hello", ContentType.Text.Plain)
@@ -52,7 +84,7 @@ class ServerHTTP(
                     try {
                         val ff = call.receive<String>()
                         println("Received: ${ff}")
-
+                        //onPostCommand(TiposComandos.StartCam)
                         // Receive and deserialize JSON to User object
                         val user = call.receive<User>()
                         // Process user (e.g., add to database)
@@ -68,7 +100,7 @@ class ServerHTTP(
                     try {
                         val command = call.receive<TiposComandos>()
                         println("Received: ${command.name}")
-                        listener.onPostCommand(command)
+                        onPostCommand(command)
 
                         call.respond(HttpStatusCode.Created, "Command ${command} received")
                     } catch (e: Exception) {
@@ -76,121 +108,61 @@ class ServerHTTP(
                     }
                 }
 
-//                get("/sse") {
-//                    println("ENTRANDO NO SSE")
-//
-//                    val heartBeatFlow: Flow<SseEvent> = flow {
-//                        while (true) {
-//                            emit(SseEvent("heartBeat"))
-//                            delay(25_000)
-//                        }
-//                    }
-//
-//                    val eventFlow: Flow<SseEvent> = flow {
-//
-//                        frameFlow?.collect { frame ->
-//                            emit(
-//                                SseEvent(
-//                                    event = "frame",
-//                                    data = frame
-//                                )
-//                            )
-//                        }
-//
-//                    }
-//
-//                    call.streamSse(merge(heartBeatFlow, eventFlow))
-//                    //call.streamSse(merge(heartBeatFlow))
-//                    println("SAINDO DO SSE")
-//                }
+
 
                 get("/sse") {
-                    println( "ENTRANDO NO SSE")
+                    println("ENTRANDO NO SSE")
 
                     val heartBeatFlow: Flow<SseEvent> = flow {
                         while (true) {
-                            emit(SseEvent("heartBeat"))
+                            emit(SseEvent("heartBeat","Running: ${Clock.System.now().epochSeconds}"))
                             delay(25_000)
                         }
                     }
 
-                    val cFrameFlow: Flow<SseEvent> = flow {
-
-                        cameraFrameFlow?.collect { frame ->
-                            emit(
-                                SseEvent(
-                                    event = "cameraFrame",
-                                    data = frame
-                                )
-                            )
-                        }
-
+                    eventsToSendFlow.forEach { eventToSendFlow ->
+                        vv.add(flow {
+                            eventToSendFlow.collect { event ->
+                                emit(event)
+                            }
+                        })
                     }
 
-                    val cPositionFlow: Flow<SseEvent> = flow {
+                    var gg = merge(
+                        heartBeatFlow
+                    )
 
-                        cameraPositionFlow?.collect { frame ->
-                            emit(
-                                SseEvent(
-                                    event = "cameraPosition",
-                                    data = frame
-                                )
-                            )
-                        }
-
+                    vv.forEach { eventFlow ->
+                        gg = merge(gg, eventFlow)
                     }
 
+                    call.streamSse(
+                        gg
+                    )
 
-                    val dEventFlow: Flow<SseEvent> = flow {
-                        droneEventFlow?.collect { event ->
-                            emit(
-                                SseEvent(
-                                    event = "droneEvent",
-                                    data = event
-                                )
-                            )
-                        }
-                    }
-
-                    val dFrameFlow: Flow<SseEvent> = flow {
-                        droneFrameFlow?.collect { frame ->
-                            emit(
-                                SseEvent(
-                                    event = "droneFrame",
-                                    data = frame
-                                )
-                            )
-                        }
-                    }
-
-                    val dPositionFlow: Flow<SseEvent> = flow {
-                        dronePositionFlow?.collect { position ->
-                            emit(
-                                SseEvent(
-                                    event = "dronePosition",
-                                    data = position
-                                )
-                            )
-                        }
-                    }
-
-                    call.streamSse(merge(heartBeatFlow, cFrameFlow,cPositionFlow, dEventFlow, dFrameFlow,dPositionFlow))
-                    //call.streamSse(merge(heartBeatFlow))
-                    println( "SAINDO DO SSE")
+                    println("SAINDO DO SSE")
                 }
 
             }
         }
     }
 
+    private val scope2 = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
     fun runBlocking() {
-        instance.start(wait = true)
-        running = true
+        if (!running) {
+            scope2.launch {
+                instance.start(wait = true)
+//                running = false
+//                serverState.value = TiposConexao.Disconnected
+            }
+        }
     }
 
     fun stop() {
         instance.stop()
         running = false
+        serverStateFlow.value = TiposConexao.Disconnected
     }
 }
 

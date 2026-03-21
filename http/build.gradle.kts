@@ -3,7 +3,7 @@ plugins {
     alias(libs.plugins.androidKotlinMultiplatformLibrary)    
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)    
-    alias(libs.plugins.ktor)
+    //alias(libs.plugins.ktor)
     alias(libs.plugins.maven.publish)
 }
 
@@ -121,8 +121,8 @@ kotlin {
 }
 
 
-group = "systems.untangle"
-version = "0.2.1"
+group = "com.jonintendo"
+version = "0.0.1"
 
 mavenPublishing {
     //publishToMavenCentral()
@@ -155,9 +155,9 @@ mavenPublishing {
         }
 
         scm {
-            url = "https://github.com/votini/karta"
-            connection = "scm:git:git://github.com:vottini/karta.git"
-            developerConnection = "scm:git:ssh://github.com:vottini/karta.git"
+            url = "https://github.com/jonintendo/httpkmp"
+            connection = "scm:git:git://github.com:jonintendo/httpkmp.git"
+            developerConnection = "scm:git:ssh://github.com:jonintendo/httpkmp.git"
         }
     }
 }

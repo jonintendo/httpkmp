@@ -1,6 +1,8 @@
 package com.connection.http.client
 
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import com.connection.http.TiposComandos
 import com.connection.http.TiposConexao
 
@@ -30,7 +32,10 @@ import io.ktor.client.plugins.sse.SSE
 import io.ktor.client.plugins.sse.sse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 
 class ClientHTTP(
@@ -39,17 +44,14 @@ class ClientHTTP(
 ) {
 
     private var running = false
-    private var stopping = false
-    private var connected = false
-    private var sampling = false
-    private var listeners = mutableListOf<HttpListener>()
-
-    fun addListener(listener: HttpListener) {
+    var clientStateFlow = MutableStateFlow(TiposConexao.Disconnected)
+    var eventState = mutableStateOf("teste")
+    private var listeners = mutableListOf<HttpClientListener>()
+    fun addListener(listener: HttpClientListener) {
         listeners.add(listener)
     }
 
-
-    fun removeListener(listener: HttpListener) {
+    fun removeListener(listener: HttpClientListener) {
         listeners.remove(listener)
     }
 
@@ -59,55 +61,54 @@ class ClientHTTP(
         }
     }
 
-    private fun onChangeConexionSSE(conexionState: TiposConexao) {
-        listeners.forEach { listener ->
-            listener.onChangeConexionSSE(conexionState)
-        }
-    }
+//    private fun onChangeConexionSSE(conexionState: TiposConexao) {
+//        listeners.forEach { listener ->
+//            listener.onChangeConexionSSE(conexionState)
+//        }
+//    }
 
-    private fun onReturnGet(response: String) {
-        listeners.forEach { listener ->
-            listener.onReturnGet(response)
-        }
-    }
-
-    private fun onReturnPost(response: String) {
-        listeners.forEach { listener ->
-            listener.onReturnPost(response)
-        }
-    }
+//
+//    private fun onReturnGet(response: String) {
+//        listeners.forEach { listener ->
+//            listener.onReturnGet(response)
+//        }
+//    }
+//
+//    private fun onReturnPost(response: String) {
+//        listeners.forEach { listener ->
+//            listener.onReturnPost(response)
+//        }
+//    }
 
 
     private val scope2 = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
 
     fun listenCommandsUntilStopped() {
-
         if (running)
             return
-
-        running = true
-
-
-        val client = HttpClient {
-            install(HttpTimeout) {
+        scope2.launch {
+            try {
+                running = true
+                clientStateFlow.value = TiposConexao.Connected
+                val client = HttpClient {
+                    install(HttpTimeout) {
 //                // Timeout for the entire request, from start to finish
 //                requestTimeoutMillis = 6000
 //                // Timeout for establishing the connection
 //                connectTimeoutMillis = 1000
 //                // Maximum time between two data packets (useful for SSE streams)
 //                socketTimeoutMillis = 30_000 // 10 minutes, for example
-            }
+                    }
 
-            install(SSE) {
-                reconnectionTime = 3.seconds
-                maxReconnectionAttempts = 5
-            }
-        }
+                    install(SSE) {
+                        reconnectionTime = 3.seconds
+                        maxReconnectionAttempts = 5
+                    }
+                }
 
-        scope2.launch {
-            try {
-                onChangeConexionSSE(TiposConexao.Connected)
+
+
                 client.sse(urlString = "$url/sse", showRetryEvents = true) {
 //                    timeout {
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
@@ -120,76 +121,33 @@ class ClientHTTP(
 
             } catch (e: Exception) {
                 // Handle other exceptions
-               // e.printStackTrace()
+                // e.printStackTrace()
                 println(e.message)
-            }finally {
+            } finally {
                 running = false
-                onChangeConexionSSE(TiposConexao.Disconnected)
+
+                clientStateFlow.value = TiposConexao.Disconnected
             }
         }
     }
 
 
-//
-//    private val eventSource = EventSource.Builder(
-//        ConnectStrategy
-//            .http(URI("$url/sse"))
-//            .readTimeout(30L, TimeUnit.SECONDS)
-//    )
-//        .expectFields()
-//        .errorStrategy(ErrorStrategy.alwaysContinue())
-//        .build()
-//
-//
-//    fun listenCommandsUntilStopped2() {
-//        if (running)
-//            return
-//        var autoCancelJob: Job? = null
-//        running = true
-//        scope2.launch {
-//            while (running) {
-//                when (val event = eventSource.readAnyEvent()) {
-//                    is MessageEvent -> {
-//                        onEventReceive(event.eventName, event.data)
-//                    }
-//
-//                    is FaultEvent -> {
-//                        if (stopping) {
-//                            if (sampling) {
-//
-//                                autoCancelJob?.cancel()
-//                                autoCancelJob = null
-//                            }
-//
-//                            stopping = false
-//                            connected = false
-//                            running = false
-//
-//                            onChangeConexionSSE(TiposConexao.Reconnecting)
-//                        } else if (connected) {
-//
-//                            connected = false
-//                            onChangeConexionSSE(TiposConexao.Disconnected)
-//                        }
-//
-//                    }
-//
-//                    is StreamEvent -> {
-//                        if (!connected) {
-//                            connected = true
-//                        }
-//                        onChangeConexionSSE(TiposConexao.Connected)
-//                    }
-//
-//                    else -> {
-//                        println("Event: ${event}")
-//                    }
-//                }
-//                println("Running: ${Clock.System.now().epochSeconds}")
-//                // delay(500)
-//            }
-//        }
-//    }
+    @OptIn(ExperimentalTime::class)
+    fun listenCommandsUntilStopped2(eventclient: MutableState<String>) {
+        if (running)
+            return
+        var autoCancelJob: Job? = null
+        running = true
+        var count = 0
+        scope2.launch {
+            while (running) {
+                eventclient.value = "${count++}"
+                eventState.value = "${count++}"
+                println("Running: ${Clock.System.now().epochSeconds}")
+                delay(500)
+            }
+        }
+    }
 
 
     fun stop() {
@@ -200,7 +158,7 @@ class ClientHTTP(
     }
 
 
-    fun get() {
+    fun get(responseState: MutableState<String>) {
         scope.launch {
             val client = HttpClient(CIO) {
                 install(HttpTimeout)
@@ -210,8 +168,9 @@ class ClientHTTP(
                     requestTimeoutMillis = 3000
                 }
             }
-            val body: String = response.body()
-            onReturnGet(body)
+            //val body: String = response.body()
+            responseState.value = response.bodyAsText()
+
             println("Response status: ${response.status}")
             println("Response body: ${response.bodyAsText()}")
             client.close()
@@ -219,7 +178,7 @@ class ClientHTTP(
     }
 
 
-    fun post(command: TiposComandos) = scope.launch {
+    fun post(command: TiposComandos, responseState: MutableState<String>) = scope.launch {
         val client = HttpClient(CIO) {
             install(ContentNegotiation) {
                 //gson()
@@ -233,29 +192,8 @@ class ClientHTTP(
             contentType(ContentType.Application.Json)
             setBody(command) // Ktor handles serialization
         }
-        val body: String = response.body()
-        onReturnPost(body)
-        println("Response status: ${response.status}")
-        println("Response body: ${response.bodyAsText()}")
-        client.close()
-    }
-
-
-    fun post() = scope.launch {
-        val client = HttpClient(CIO) {
-            install(ContentNegotiation) {
-                json()
-            }
-            install(HttpTimeout)
-        }
-
-        val user = User("John Doe", 123)
-        val response: HttpResponse = client.post("$url/user") {
-            contentType(ContentType.Application.Json)
-            setBody(user) // Ktor handles serialization
-        }
-        val body: String = response.body()
-        onReturnPost(body)
+        //val body: String = response.body()
+        responseState.value = response.bodyAsText()
         println("Response status: ${response.status}")
         println("Response body: ${response.bodyAsText()}")
         client.close()

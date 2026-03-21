@@ -1,6 +1,11 @@
 package com.connection.http.server
 
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.connection.http.SseEvent
 import com.connection.http.TiposComandos
 import com.connection.http.TiposConexao
 
@@ -17,54 +22,41 @@ class ServerViewModel : ViewModel(),
 
     val serverEventState = MutableStateFlow("")
 
-    val serverState = MutableStateFlow(TiposConexao.Disconnected)
-    val returnGetState = MutableStateFlow("")
-    val returnPostState = MutableStateFlow("")
+    var serverState = MutableStateFlow(TiposConexao.Disconnected)
+
+    //var serverState = mutableStateOf(TiposConexao.Disconnected)
+    val returnPostState = MutableStateFlow("nothing yet")
 
 
     private var _server: ServerHTTP? = null
+    var eventsToSendFlow: MutableList<MutableSharedFlow<SseEvent>> = mutableListOf()
 
-
-    var commandFlow = MutableSharedFlow<TiposComandos>(
-        extraBufferCapacity = 1
-    )
-
-
-
-    private var cameraFrameFlow = MutableSharedFlow<String>(
-        extraBufferCapacity = 1
-    )
-
-    private var cameraPositionFlow = MutableSharedFlow<String>(
-        extraBufferCapacity = 1
-    )
-
-    private var droneFrameFlow = MutableSharedFlow<String>(
-        extraBufferCapacity = 1
-    )
-
-    private var droneEventFlow = MutableSharedFlow<String>(
-        extraBufferCapacity = 1
-    )
-
-    private var dronePositionFlow = MutableSharedFlow<String>(
-        extraBufferCapacity = 1
-    )
 
     fun onCreate() {
-       if( _server == null) {
-           _server = ServerHTTP(7733, this)
-       }
-        _server!!.cameraFrameFlow = cameraFrameFlow
-        _server!!.cameraPositionFlow = cameraPositionFlow
-        _server!!.droneFrameFlow = droneFrameFlow
-        _server!!.droneEventFlow = droneEventFlow
-        _server!!.dronePositionFlow = dronePositionFlow
-        onStartCommand()
-        println("BackgroundTaskService is ready to conquer!")
+        if (_server == null) {
+            _server = ServerHTTP(
+                7733,
+                viewModelScope
+            )
+            println(eventsToSendFlow.count())
+            eventsToSendFlow.forEach { event ->
+                _server?.addEventSharedFlow(event)
+            }
 
+            _server?.runBlocking()
+            _server!!.serverStateFlow = serverState
+            // _server!!.serverState = serverState
+            println("BackgroundTaskService is ready to conquer!")
+        }
     }
 
+    fun addListener() {
+        _server?.addListener(this)
+    }
+
+    fun removeListener() {
+        _server?.removeListener(this)
+    }
 
     fun onDestroy() {
         if (_server != null) {
@@ -74,47 +66,11 @@ class ServerViewModel : ViewModel(),
         }
     }
 
-    private val scope2 = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    fun onStartCommand() {
-        println("Starting Combatente Service")
-        val step = 5.0f
-        scope2.launch {
-            //  runBlocking {
-
-            val httpJob = launch {
-                if (_server?.running == false)
-                    _server?.runBlocking()
-            }
-
-            val commandJob = launch {
-                commandFlow.collect { command ->
-                    println("o comando eh : ${command.name}")
-                    when (command) {
-                        TiposComandos.StartCam -> {
-                            println(command.name)
-                        }
-
-                        else -> {
-                            println("nadaaa")
-                        }
-                    }
-                }
-            }
-
-            println("Sending Service Stopped")
-            // }
-        }
-
-    }
-
 
     override fun onPostCommand(command: TiposComandos) {
         val message = "Comando ${command.name} recebido pela httpserver"
         println(message)
-        //listener?.onBackEvent(TiposEventos.HTTP, message)
         returnPostState.value = command.name
-
-        commandFlow.tryEmit(command)
     }
+
 }
