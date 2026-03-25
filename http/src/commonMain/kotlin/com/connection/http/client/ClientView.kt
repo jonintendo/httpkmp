@@ -76,14 +76,14 @@ fun ClientView(viewModel: ClientViewModel, content: @Composable () -> Unit) {
 
             Button(onClick = {
                 //stopService(serviceIntent)
-                viewModel.addListener()
+                viewModel.addListener(viewModel)
             }) {
                 Text(text = " Add Myself listener")
             }
 
             Button(onClick = {
                 //stopService(serviceIntent)
-                viewModel.removeListener()
+                viewModel.removeListener(viewModel)
             }) {
                 Text(text = " Remove Myself listener")
             }

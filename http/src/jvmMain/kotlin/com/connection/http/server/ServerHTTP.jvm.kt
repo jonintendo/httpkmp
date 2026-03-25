@@ -18,7 +18,7 @@ actual suspend fun ApplicationCall.streamSse(events: Flow<SseEvent>) {
             .catch { ws -> println("SAINDO DO SSE ${ws.message}") }
             .collect { event ->
                 val dataStr = event.data ?: ""
-                write("event: ${event.event}\n")
+                write("event: ${event.eventType.name}\n")
                 write("data: $dataStr\n")
                 write("\n")
                 flush()

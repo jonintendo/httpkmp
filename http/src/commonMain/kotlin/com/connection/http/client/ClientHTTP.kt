@@ -3,8 +3,10 @@ package com.connection.http.client
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import com.connection.http.SseEvent
 import com.connection.http.TiposComandos
 import com.connection.http.TiposConexao
+import com.connection.http.TiposEventos
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -30,22 +32,28 @@ import io.ktor.http.contentType
 //import com.launchdarkly.eventsource.*
 import io.ktor.client.plugins.sse.SSE
 import io.ktor.client.plugins.sse.sse
+import io.ktor.sse.ServerSentEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 
 class ClientHTTP(
     private val url: String,
-    private val scope: CoroutineScope,
+  //  private val scope: CoroutineScope,
 ) {
 
     private var running = false
     var clientStateFlow = MutableStateFlow(TiposConexao.Disconnected)
     var eventState = mutableStateOf("teste")
+
+
+    private val lastEventData = MutableStateFlow<SseEvent>(SseEvent(TiposEventos.HTTP))
+    val eventFlow: SharedFlow<SseEvent> = lastEventData
     private var listeners = mutableListOf<HttpClientListener>()
     fun addListener(listener: HttpClientListener) {
         listeners.add(listener)
@@ -55,9 +63,9 @@ class ClientHTTP(
         listeners.remove(listener)
     }
 
-    private fun onEventReceive(eventName: String, eventData: String) {
+    private fun onEventReceive(event: ServerSentEvent) {
         listeners.forEach { listener ->
-            listener.onEventReceive(eventName, eventData)
+            listener.onEventReceive(SseEvent(TiposEventos.valueOf(event.event!!), event.data))
         }
     }
 
@@ -114,7 +122,8 @@ class ClientHTTP(
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                    }
                     incoming.collect { event ->
-                        onEventReceive(event.event!!, event.data!!)
+                        onEventReceive(event)
+                        lastEventData.value = SseEvent(TiposEventos.valueOf(event.event!!), event.data)
                     }
                 }
             } catch (e: CancellationException) {
@@ -159,7 +168,7 @@ class ClientHTTP(
 
 
     fun get(responseState: MutableState<String>) {
-        scope.launch {
+        scope2.launch {
             val client = HttpClient(CIO) {
                 install(HttpTimeout)
             }
@@ -178,7 +187,7 @@ class ClientHTTP(
     }
 
 
-    fun post(command: TiposComandos, responseState: MutableState<String>) = scope.launch {
+    fun post(command: TiposComandos, responseState: MutableState<String>) = scope2.launch {
         val client = HttpClient(CIO) {
             install(ContentNegotiation) {
                 //gson()

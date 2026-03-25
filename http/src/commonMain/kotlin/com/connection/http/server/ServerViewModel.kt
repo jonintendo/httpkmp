@@ -36,7 +36,7 @@ class ServerViewModel : ViewModel(),
         if (_server == null) {
             _server = ServerHTTP(
                 7733,
-                viewModelScope
+              //  viewModelScope
             )
             println(eventsToSendFlow.count())
             eventsToSendFlow.forEach { event ->
@@ -50,12 +50,12 @@ class ServerViewModel : ViewModel(),
         }
     }
 
-    fun addListener() {
-        _server?.addListener(this)
+    fun addListener(listener:HttpServerListener) {
+        _server?.addListener(listener)
     }
 
-    fun removeListener() {
-        _server?.removeListener(this)
+    fun removeListener(listener: HttpServerListener) {
+        _server?.removeListener(listener)
     }
 
     fun onDestroy() {

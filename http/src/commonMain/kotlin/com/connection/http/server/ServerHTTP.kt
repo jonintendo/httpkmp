@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateOf
 import com.connection.http.SseEvent
 import com.connection.http.TiposComandos
 import com.connection.http.TiposConexao
+import com.connection.http.TiposEventos
 import com.connection.http.User
 
 
@@ -30,22 +31,25 @@ import kotlin.time.ExperimentalTime
 
 class ServerHTTP(
     private val portNumber: Int,
-    private val scope: CoroutineScope,
+    //private val scope: CoroutineScope,
 ) {
 
     private var vv: MutableList<Flow<SseEvent>> = mutableListOf()
     private var running = false
 
     var serverStateFlow = MutableStateFlow(TiposConexao.Disconnected)
-    var eventsToSendFlow: MutableList<MutableSharedFlow<SseEvent>> = mutableListOf()
+    private var eventsToSendFlow: MutableList<MutableSharedFlow<SseEvent>> = mutableListOf()
     fun addEventSharedFlow(eventReceivedFlow: MutableSharedFlow<SseEvent>) {
         eventsToSendFlow.add(eventReceivedFlow)
     }
+
     fun removeEventSharedFlow(eventReceivedFlow: MutableSharedFlow<SseEvent>) {
         eventsToSendFlow.add(eventReceivedFlow)
     }
 
 
+    private val lastCommandData = MutableStateFlow<TiposComandos>(TiposComandos.Stop)
+    val commandFromPostFlow: SharedFlow<TiposComandos> = lastCommandData
     private var listeners = mutableListOf<HttpServerListener>()
     fun addListener(listener: HttpServerListener) {
         listeners.add(listener)
@@ -74,7 +78,7 @@ class ServerHTTP(
                 })
             }
             running = true
-            serverStateFlow.value= TiposConexao.Connected
+            serverStateFlow.value = TiposConexao.Connected
             routing {
                 get("/") {
                     call.respondText("Hello", ContentType.Text.Plain)
@@ -101,7 +105,7 @@ class ServerHTTP(
                         val command = call.receive<TiposComandos>()
                         println("Received: ${command.name}")
                         onPostCommand(command)
-
+                        lastCommandData.value = command
                         call.respond(HttpStatusCode.Created, "Command ${command} received")
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
@@ -115,7 +119,12 @@ class ServerHTTP(
 
                     val heartBeatFlow: Flow<SseEvent> = flow {
                         while (true) {
-                            emit(SseEvent("heartBeat","Running: ${Clock.System.now().epochSeconds}"))
+                            emit(
+                                SseEvent(
+                                    TiposEventos.HeartBeat,
+                                    "Running: ${Clock.System.now().epochSeconds}"
+                                )
+                            )
                             delay(25_000)
                         }
                     }
