@@ -67,10 +67,10 @@ class ServerViewModel : ViewModel(),
     }
 
 
-    override fun onPostCommand(command: TiposComandos) {
-        val message = "Comando ${command.name} recebido pela httpserver"
+    override fun onPostCommand(command: String) {
+        val message = "Comando ${command} recebido pela httpserver"
         println(message)
-        returnPostState.value = command.name
+        returnPostState.value = command
     }
 
 }

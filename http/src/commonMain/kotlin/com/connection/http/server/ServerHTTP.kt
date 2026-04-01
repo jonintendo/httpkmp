@@ -48,8 +48,8 @@ class ServerHTTP(
     }
 
 
-    private val lastCommandData = MutableStateFlow<TiposComandos>(TiposComandos.Stop)
-    val commandFromPostFlow: SharedFlow<TiposComandos> = lastCommandData
+    private val lastCommandData = MutableStateFlow<String>("")
+    val commandFromPostFlow: SharedFlow<String> = lastCommandData
     private var listeners = mutableListOf<HttpServerListener>()
     fun addListener(listener: HttpServerListener) {
         listeners.add(listener)
@@ -59,7 +59,7 @@ class ServerHTTP(
         listeners.remove(listener)
     }
 
-    private fun onPostCommand(command: TiposComandos) {
+    private fun onPostCommand(command: String) {
         listeners.forEach { listener ->
             listener.onPostCommand(command)
         }
@@ -102,8 +102,8 @@ class ServerHTTP(
 
                 post("/command") {
                     try {
-                        val command = call.receive<TiposComandos>()
-                        println("Received: ${command.name}")
+                        val command = call.receive<String>()
+                        println("Received: ${command}")
                         onPostCommand(command)
                         lastCommandData.value = command
                         call.respond(HttpStatusCode.Created, "Command ${command} received")
@@ -121,7 +121,7 @@ class ServerHTTP(
                         while (true) {
                             emit(
                                 SseEvent(
-                                    TiposEventos.HeartBeat,
+                                    TiposEventos.HeartBeat.name,
                                     "Running: ${Clock.System.now().epochSeconds}"
                                 )
                             )

@@ -138,7 +138,7 @@ mavenPublishing {
         name = "http"
         description = "A tile map component in pure compose multiplatform"
         inceptionYear = "2025"
-        url = "https://github.com/votini/karta"
+        url = "https://github.com/jonintendo/httpkmp"
 
         licenses {
             license {

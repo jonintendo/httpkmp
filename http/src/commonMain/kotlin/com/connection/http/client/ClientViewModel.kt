@@ -65,7 +65,7 @@ class ClientViewModel : ViewModel(), HttpClientListener {
         _client = null
     }
 
-    fun postInfo(command: TiposComandos) {
+    fun postInfo(command: String) {
         _client?.post(command, returnPostState)
     }
 
@@ -75,8 +75,8 @@ class ClientViewModel : ViewModel(), HttpClientListener {
 
     override fun onEventReceive(event: SseEvent) {
         when (event.eventType) {
-            TiposEventos.HeartBeat ->  {
-                println("eventName ${event.eventType.name},eventData: ${event.data}")
+            TiposEventos.HeartBeat.name ->  {
+                println("eventName ${event.eventType},eventData: ${event.data}")
             }
             else ->{
 

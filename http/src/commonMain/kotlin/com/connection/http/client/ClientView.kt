@@ -69,7 +69,7 @@ fun ClientView(viewModel: ClientViewModel, content: @Composable () -> Unit) {
             }
 
             Button(onClick = {
-                viewModel.postInfo(TiposComandos.CancelReturn)
+                viewModel.postInfo(TiposComandos.StartServer.name)
             }) {
                 Text("POST!!!!!!!!!!!!")
             }

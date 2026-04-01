@@ -52,7 +52,7 @@ class ClientHTTP(
     var eventState = mutableStateOf("teste")
 
 
-    private val lastEventData = MutableStateFlow<SseEvent>(SseEvent(TiposEventos.HTTP))
+    private val lastEventData = MutableStateFlow<SseEvent>(SseEvent(TiposEventos.HTTP.name))
     val eventFlow: SharedFlow<SseEvent> = lastEventData
     private var listeners = mutableListOf<HttpClientListener>()
     fun addListener(listener: HttpClientListener) {
@@ -65,7 +65,7 @@ class ClientHTTP(
 
     private fun onEventReceive(event: ServerSentEvent) {
         listeners.forEach { listener ->
-            listener.onEventReceive(SseEvent(TiposEventos.valueOf(event.event!!), event.data))
+            listener.onEventReceive(SseEvent(event.event!!, event.data))
         }
     }
 
@@ -123,7 +123,7 @@ class ClientHTTP(
 //                    }
                     incoming.collect { event ->
                         onEventReceive(event)
-                        lastEventData.value = SseEvent(TiposEventos.valueOf(event.event!!), event.data)
+                        lastEventData.value = SseEvent(event.event!!, event.data)
                     }
                 }
             } catch (e: CancellationException) {
@@ -187,7 +187,7 @@ class ClientHTTP(
     }
 
 
-    fun post(command: TiposComandos, responseState: MutableState<String>) = scope2.launch {
+    fun post(command: String, responseState: MutableState<String>) = scope2.launch {
         val client = HttpClient(CIO) {
             install(ContentNegotiation) {
                 //gson()

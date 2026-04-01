@@ -5,5 +5,5 @@ import com.connection.http.TiposConexao
 
 
 interface HttpServerListener {
-    fun onPostCommand(command: TiposComandos)
+    fun onPostCommand(command: String)
 }
