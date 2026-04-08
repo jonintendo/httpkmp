@@ -3,6 +3,7 @@ package com.connection.http.client
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import com.connection.http.Header
 import com.connection.http.SseEvent
 import com.connection.http.TiposComandos
 import com.connection.http.TiposConexao
@@ -137,6 +138,7 @@ class ClientHTTP(
 
                 clientStateFlow.value = TiposConexao.Disconnected
             }
+
         }
     }
 
@@ -208,5 +210,64 @@ class ClientHTTP(
         client.close()
     }
 
+
+    companion object {
+        private val scope1 = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+
+        suspend fun get(url: String, headers: List<Header>): String {
+
+            //  scope1.launch {
+            val client = HttpClient(CIO) {
+                install(HttpTimeout)
+            }
+            val response: HttpResponse = client.get(url) {
+                timeout {
+                    requestTimeoutMillis = 3000
+                }
+                headers {
+                    headers.forEach { header ->
+                        append(header.key, header.value)
+                    }
+                }
+            }
+            //val body: String = response.body()
+            //responseState.value = response.bodyAsText()
+
+            println("Response status: ${response.status}")
+            println("Response body: ${response.bodyAsText()}")
+            client.close()
+            return response.bodyAsText()
+            //  }
+        }
+
+        suspend fun post(command: String,url: String, headers: List<Header>): String {
+
+            val client = HttpClient(CIO) {
+                install(ContentNegotiation) {
+                    //gson()
+                    json()
+                }
+                install(HttpTimeout)
+            }
+
+            val response: HttpResponse = client.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(command) // Ktor handles serialization
+                headers {
+                    headers.forEach { header ->
+                        append(header.key, header.value)
+                    }
+                }
+            }
+            //val body: String = response.body()
+            // responseState.value = response.bodyAsText()
+            println("Response status: ${response.status}")
+            println("Response body: ${response.bodyAsText()}")
+            client.close()
+            return response.bodyAsText()
+        }
+
+    }
 
 }
