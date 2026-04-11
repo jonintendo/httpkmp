@@ -74,13 +74,13 @@ kotlin {
                 implementation(libs.ktor.serverNegotiation)
 
 
-                implementation(compose.runtime)
-                implementation(compose.foundation)
-                implementation(compose.material)
-                implementation(compose.ui)
-                implementation(compose.components.resources)
-                implementation(compose.components.uiToolingPreview)
-                implementation(libs.androidx.lifecycle.viewmodelCompose)
+//                implementation(compose.runtime)
+//                implementation(compose.foundation)
+//                implementation(compose.material)
+//                implementation(compose.ui)
+//                implementation(compose.components.resources)
+//                implementation(compose.components.uiToolingPreview)
+//                implementation(libs.androidx.lifecycle.viewmodelCompose)
                 implementation(libs.androidx.lifecycle.runtimeCompose)
             }
         }

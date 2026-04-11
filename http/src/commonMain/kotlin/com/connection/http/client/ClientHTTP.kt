@@ -20,6 +20,7 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
+import io.ktor.client.plugins.HttpTimeoutConfig.Companion.INFINITE_TIMEOUT_MS
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -36,6 +37,7 @@ import io.ktor.client.plugins.sse.sse
 import io.ktor.sse.ServerSentEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -45,7 +47,9 @@ import kotlin.time.ExperimentalTime
 
 class ClientHTTP(
     private val url: String,
-  //  private val scope: CoroutineScope,
+    private val name: String,
+    private val id: Int,
+    //  private val scope: CoroutineScope,
 ) {
 
     private var running = false
@@ -104,6 +108,7 @@ class ClientHTTP(
                     install(HttpTimeout) {
 //                // Timeout for the entire request, from start to finish
 //                requestTimeoutMillis = 6000
+                        //              requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                // Timeout for establishing the connection
 //                connectTimeoutMillis = 1000
 //                // Maximum time between two data packets (useful for SSE streams)
@@ -116,9 +121,7 @@ class ClientHTTP(
                     }
                 }
 
-
-
-                client.sse(urlString = "$url/sse", showRetryEvents = true) {
+                client.sse(urlString = "$url/sse/$id/$name", showRetryEvents = true) {
 //                    timeout {
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                    }
@@ -210,10 +213,26 @@ class ClientHTTP(
         client.close()
     }
 
+    private  var inputStreamSender: InputStreamSender? = null
+
+    fun startSendStream(source: String, fps:Long) {
+        inputStreamSender = InputStreamSender(source, "$url/stream", mapOf(), scope2)
+        inputStreamSender!!.startSend( fps)
+    }
+
+    fun stopSendStream() {
+        inputStreamSender?.stopSend()
+        inputStreamSender = null
+    }
+
+    fun sendStream(source: String, value: String) {
+        scope2.launch {
+            inputStreamSender?.setFrame(value)
+        }
+    }
 
     companion object {
         private val scope1 = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
 
         suspend fun get(url: String, headers: List<Header>): String {
 
@@ -241,7 +260,7 @@ class ClientHTTP(
             //  }
         }
 
-        suspend fun post(command: String,url: String, headers: List<Header>): String {
+        suspend fun post(command: String, url: String, headers: List<Header>): String {
 
             val client = HttpClient(CIO) {
                 install(ContentNegotiation) {

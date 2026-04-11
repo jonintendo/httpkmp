@@ -6,6 +6,8 @@ import com.connection.http.TiposComandos
 import com.connection.http.TiposConexao
 import com.connection.http.TiposEventos
 import com.connection.http.User
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.sse.SSE
 
 
 import io.ktor.http.*
@@ -17,15 +19,25 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.plugins.contentnegotiation.*
+
 import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.request.receiveChannel
+import io.ktor.sse.ServerSentEvent
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.core.remaining
+import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readText
+import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 
@@ -36,6 +48,7 @@ class ServerHTTP(
 
     private var vv: MutableList<Flow<SseEvent>> = mutableListOf()
     private var running = false
+    private var users = mutableListOf<User>()
 
     var serverStateFlow = MutableStateFlow(TiposConexao.Disconnected)
     private var eventsToSendFlow: MutableList<MutableSharedFlow<SseEvent>> = mutableListOf()
@@ -65,6 +78,7 @@ class ServerHTTP(
         }
     }
 
+
     @OptIn(ExperimentalTime::class)
     private val instance by lazy {
 
@@ -77,6 +91,7 @@ class ServerHTTP(
                     isLenient = true
                 })
             }
+
             running = true
             serverStateFlow.value = TiposConexao.Connected
             routing {
@@ -122,7 +137,7 @@ class ServerHTTP(
                             emit(
                                 SseEvent(
                                     TiposEventos.HeartBeat.name,
-                                    "Running: ${Clock.System.now().epochSeconds}"
+                                    "Running: ${Clock.System.now().epochSeconds}",
                                 )
                             )
                             delay(25_000)
@@ -152,6 +167,134 @@ class ServerHTTP(
                     println("SAINDO DO SSE")
                 }
 
+
+                get("/sse/{id}/{name}") {
+                    println("USER ${call.parameters["name"]} TENTANDO ENTRAR NO SSE")
+                    var id: Int = 0
+                    var name = ""
+                    val usersFlow: Flow<SseEvent> = flow {
+                        try {
+                            id = call.parameters["id"]?.toInt() ?: 0
+                            if (id == 0) {
+                                emit(
+                                    SseEvent(
+                                        TiposEventos.USER.name,
+                                        "insira um id valido",
+                                    )
+                                )
+                                return@flow
+                            }
+                            if (users.any { participant -> participant.id == id }) {
+                                emit(
+                                    SseEvent(
+                                        TiposEventos.USER.name,
+                                        "$name: ja existe um usuario com este id",
+                                    )
+                                )
+                                return@flow
+                            }
+                        } catch (ex: Exception) {
+                            emit(
+                                SseEvent(
+                                    TiposEventos.USER.name,
+                                    "insira um id valido",
+                                )
+                            )
+                            return@flow
+                        }
+
+                        name = call.parameters["name"] ?: ""
+                        if (name == "") {
+                            emit(
+                                SseEvent(
+                                    TiposEventos.USER.name,
+                                    "usuario precisa de um nome",
+                                )
+                            )
+                            return@flow
+                        }
+
+                        if (users.any { participant -> participant.name == name }) {
+                            emit(
+                                SseEvent(
+                                    TiposEventos.USER.name,
+                                    "$id: ja existe um usuario com este nome",
+                                )
+                            )
+                            return@flow
+                        }
+
+
+                        users.add(User(name, id))
+                        // store.dispatch(SetParticipants(participants))
+                        //  users.forEach { participant ->
+                        emit(
+                            SseEvent(
+                                TiposEventos.USER.name,
+                                "id: ${id}, nome: ${name} acabou de se conectar",
+                            )
+                        )
+                        // }
+                    }
+
+                    val heartBeatFlow: Flow<SseEvent> = flow {
+                        while (true) {
+                            emit(
+                                SseEvent(
+                                    TiposEventos.HeartBeat.name,
+                                    " id: ${id}, nome: ${name}",
+                                )
+                            )
+                            delay(25_000)
+                        }
+                    }
+
+                    eventsToSendFlow.forEach { eventToSendFlow ->
+                        vv.add(flow {
+                            eventToSendFlow.collect { event ->
+                                emit(event)
+                            }
+                        })
+                    }
+
+                    var gg = merge(
+                        usersFlow, heartBeatFlow
+                    )
+
+                    vv.forEach { eventFlow ->
+                        gg = merge(gg, eventFlow)
+                    }
+
+                    try {
+                        call.streamSse(
+                            gg
+                        )
+                    } catch (exception: Exception) {
+                        println("problema ${exception.message} com o  ${id} e $name")
+                        val problematicUser = users.first { participant -> participant.id == id }
+                        users.remove(problematicUser)
+                        // store.dispatch(SetParticipants(participants))
+                    } finally {
+                        println("${id} e $name SAINDO DO SSE")
+                    }
+
+
+                }
+
+
+                post("/stream") {
+
+
+                    val channel: ByteReadChannel = call.receiveChannel()
+
+                    while (!channel.isClosedForRead) {
+                        val packet = channel.readRemaining(10)
+                        println("Received chunk of size: ${packet.remaining}")
+                        val text = packet.readText()
+                        println("Received frm stream $text")
+                    }
+                    call.respond(HttpStatusCode.Accepted)
+                }
             }
         }
     }
@@ -169,6 +312,7 @@ class ServerHTTP(
     }
 
     fun stop() {
+        scope2.cancel()
         instance.stop()
         running = false
         serverStateFlow.value = TiposConexao.Disconnected
