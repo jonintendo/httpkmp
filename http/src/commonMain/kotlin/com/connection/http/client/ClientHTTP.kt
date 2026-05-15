@@ -36,6 +36,8 @@ import io.ktor.client.plugins.sse.SSE
 import io.ktor.client.plugins.sse.sse
 import io.ktor.sse.ServerSentEvent
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -46,16 +48,16 @@ import kotlin.time.ExperimentalTime
 
 
 class ClientHTTP(
-    private val url: String,
-    private val name: String,
-    private val id: Int,
+    private val ip: String,
+    private val port: Int,
+    private val endpoint: String,
     //  private val scope: CoroutineScope,
 ) {
 
     private var running = false
     var clientStateFlow = MutableStateFlow(TiposConexao.Disconnected)
     var eventState = mutableStateOf("teste")
-
+    var addressSSE = mutableStateOf("http://$ip:$port/$endpoint")
 
     private val lastEventData = MutableStateFlow<SseEvent>(SseEvent(TiposEventos.HTTP.name))
     val eventFlow: SharedFlow<SseEvent> = lastEventData
@@ -121,7 +123,7 @@ class ClientHTTP(
                     }
                 }
 
-                client.sse(urlString = "$url/sse/$id/$name", showRetryEvents = true) {
+                client.sse(urlString =addressSSE.value, showRetryEvents = true) {
 //                    timeout {
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                    }
@@ -177,7 +179,7 @@ class ClientHTTP(
             val client = HttpClient(CIO) {
                 install(HttpTimeout)
             }
-            val response: HttpResponse = client.get("$url") {
+            val response: HttpResponse = client.get("http://$ip:$port") {
                 timeout {
                     requestTimeoutMillis = 3000
                 }
@@ -191,8 +193,31 @@ class ClientHTTP(
         }
     }
 
+    suspend fun getRotas() {
+        try {
+            //GET /navegacao/v1/rotas/[id] detalhes
+            val deferredResult: Deferred<String> = coroutineScope {
+                async {
+                    ClientHTTP.get(
+                        "https://acquavia.acquaway.com/navegacao/v1/rotas/mapa", listOf(
+                            Header(
+                                "Authorization",
+                                "Apikey aGlkcmEtYXBpa2V5LjEuWWhYU3F3VWdVQlRBR0hZWDhlTjNIUDdoTllPYTJrWHU1cHdmNkxqMHBFYVFVU3k5bUhj"
+                            )
+                        )
+                    )
+                }
+            }
 
-    fun post(command: String, responseState: MutableState<String>) = scope2.launch {
+            // detectRotasWayPoints(deferredResult.await())
+            //faz o que precisar sincronamente
+        } catch (ex: Exception) {
+            println(ex.message)
+        }
+    }
+
+
+    fun post(request: String,postendpoint: String, responseState: MutableState<String>) = scope2.launch {
         val client = HttpClient(CIO) {
             install(ContentNegotiation) {
                 //gson()
@@ -202,9 +227,9 @@ class ClientHTTP(
         }
 
 
-        val response: HttpResponse = client.post("$url/command") {
+        val response: HttpResponse = client.post("http://$ip:$port/$postendpoint") {
             contentType(ContentType.Application.Json)
-            setBody(command) // Ktor handles serialization
+            setBody(request) // Ktor handles serialization
         }
         //val body: String = response.body()
         responseState.value = response.bodyAsText()
@@ -213,11 +238,11 @@ class ClientHTTP(
         client.close()
     }
 
-    private  var inputStreamSender: InputStreamSender? = null
+    private var inputStreamSender: InputStreamSender? = null
 
-    fun startSendStream(source: String, fps:Long) {
-        inputStreamSender = InputStreamSender(source, "$url/stream", mapOf(), scope2)
-        inputStreamSender!!.startSend( fps)
+    fun startSendStream(source: String,streamendpoint:String, fps: Long) {
+        inputStreamSender = InputStreamSender(source, "http://$ip:$port/$streamendpoint", mapOf(), scope2)
+        inputStreamSender!!.startSend(fps)
     }
 
     fun stopSendStream() {
@@ -232,7 +257,7 @@ class ClientHTTP(
     }
 
     companion object {
-        private val scope1 = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
 
         suspend fun get(url: String, headers: List<Header>): String {
 
