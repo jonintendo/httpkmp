@@ -50,7 +50,7 @@ class ServerHTTP(
     private var running = false
     private var users = mutableListOf<User>()
 
-    var serverStateFlow = MutableStateFlow(TiposConexao.Disconnected)
+
     private var eventsToSendFlow: MutableList<MutableSharedFlow<SseEvent>> = mutableListOf()
     fun addEventSharedFlow(eventReceivedFlow: MutableSharedFlow<SseEvent>) {
         eventsToSendFlow.add(eventReceivedFlow)
@@ -60,6 +60,8 @@ class ServerHTTP(
         eventsToSendFlow.add(eventReceivedFlow)
     }
 
+    private val lastStateData = MutableStateFlow(TiposConexao.Disconnected)
+    var serverStateFlow: SharedFlow<TiposConexao> = lastStateData
 
     private val lastCommandData = MutableStateFlow<String>("")
     val commandFromPostFlow: SharedFlow<String> = lastCommandData
@@ -79,6 +81,14 @@ class ServerHTTP(
     }
 
 
+    private fun onConnected(connectionState: TiposConexao) {
+        lastStateData.value = connectionState
+        listeners.forEach { listener ->
+            listener.onConnected(connectionState)
+        }
+    }
+
+
     @OptIn(ExperimentalTime::class)
     private val instance by lazy {
 
@@ -93,7 +103,7 @@ class ServerHTTP(
             }
 
             running = true
-            serverStateFlow.value = TiposConexao.Connected
+            onConnected(TiposConexao.Connected)
             routing {
                 get("/") {
                     call.respondText("Hello", ContentType.Text.Plain)
@@ -315,7 +325,8 @@ class ServerHTTP(
         scope2.cancel()
         instance.stop()
         running = false
-        serverStateFlow.value = TiposConexao.Disconnected
+
+        onConnected(TiposConexao.Disconnected)
     }
 }
 

@@ -55,12 +55,16 @@ class ClientHTTP(
 ) {
 
     private var running = false
-    var clientStateFlow = MutableStateFlow(TiposConexao.Disconnected)
+
     var eventState = mutableStateOf("teste")
     var addressSSE = mutableStateOf("http://$ip:$port/$endpoint")
 
+
+    private val lastStateData = MutableStateFlow(TiposConexao.Disconnected)
+    var clientStateFlow: SharedFlow<TiposConexao> = lastStateData
     private val lastEventData = MutableStateFlow<SseEvent>(SseEvent(TiposEventos.HTTP.name))
     val eventFlow: SharedFlow<SseEvent> = lastEventData
+
     private var listeners = mutableListOf<HttpClientListener>()
     fun addListener(listener: HttpClientListener) {
         listeners.add(listener)
@@ -70,9 +74,18 @@ class ClientHTTP(
         listeners.remove(listener)
     }
 
-    private fun onEventReceive(event: ServerSentEvent) {
+    private fun onEventReceive(event: SseEvent) {
+        lastEventData.value = event
         listeners.forEach { listener ->
-            listener.onEventReceive(SseEvent(event.event!!, event.data))
+            listener.onEventReceive(event)
+        }
+    }
+
+
+    private fun onConnected(connectionState: TiposConexao) {
+        lastStateData.value = connectionState
+        listeners.forEach { listener ->
+            listener.onConnected(connectionState)
         }
     }
 
@@ -105,7 +118,8 @@ class ClientHTTP(
         scope2.launch {
             try {
                 running = true
-                clientStateFlow.value = TiposConexao.Connected
+
+                onConnected(TiposConexao.Connected)
                 val client = HttpClient {
                     install(HttpTimeout) {
 //                // Timeout for the entire request, from start to finish
@@ -123,13 +137,12 @@ class ClientHTTP(
                     }
                 }
 
-                client.sse(urlString =addressSSE.value, showRetryEvents = true) {
+                client.sse(urlString = addressSSE.value, showRetryEvents = true) {
 //                    timeout {
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                    }
                     incoming.collect { event ->
-                        onEventReceive(event)
-                        lastEventData.value = SseEvent(event.event!!, event.data)
+                        onEventReceive(SseEvent(event.event!!, event.data))
                     }
                 }
             } catch (e: CancellationException) {
@@ -141,7 +154,8 @@ class ClientHTTP(
             } finally {
                 running = false
 
-                clientStateFlow.value = TiposConexao.Disconnected
+
+                onConnected(TiposConexao.Disconnected)
             }
 
         }
@@ -217,31 +231,33 @@ class ClientHTTP(
     }
 
 
-    fun post(request: String,postendpoint: String, responseState: MutableState<String>) = scope2.launch {
-        val client = HttpClient(CIO) {
-            install(ContentNegotiation) {
-                //gson()
-                json()
+    fun post(request: String, postendpoint: String, responseState: MutableState<String>) =
+        scope2.launch {
+            val client = HttpClient(CIO) {
+                install(ContentNegotiation) {
+                    //gson()
+                    json()
+                }
+                install(HttpTimeout)
             }
-            install(HttpTimeout)
-        }
 
 
-        val response: HttpResponse = client.post("http://$ip:$port/$postendpoint") {
-            contentType(ContentType.Application.Json)
-            setBody(request) // Ktor handles serialization
+            val response: HttpResponse = client.post("http://$ip:$port/$postendpoint") {
+                contentType(ContentType.Application.Json)
+                setBody(request) // Ktor handles serialization
+            }
+            //val body: String = response.body()
+            responseState.value = response.bodyAsText()
+            println("Response status: ${response.status}")
+            println("Response body: ${response.bodyAsText()}")
+            client.close()
         }
-        //val body: String = response.body()
-        responseState.value = response.bodyAsText()
-        println("Response status: ${response.status}")
-        println("Response body: ${response.bodyAsText()}")
-        client.close()
-    }
 
     private var inputStreamSender: InputStreamSender? = null
 
-    fun startSendStream(source: String,streamendpoint:String, fps: Long) {
-        inputStreamSender = InputStreamSender(source, "http://$ip:$port/$streamendpoint", mapOf(), scope2)
+    fun startSendStream(source: String, streamendpoint: String, fps: Long) {
+        inputStreamSender =
+            InputStreamSender(source, "http://$ip:$port/$streamendpoint", mapOf(), scope2)
         inputStreamSender!!.startSend(fps)
     }
 
