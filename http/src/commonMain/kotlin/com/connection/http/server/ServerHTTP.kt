@@ -3,29 +3,34 @@ package com.connection.http.server
 
 //import io.ktor.server.netty.Netty
 
-import com.connection.http.HttpProperties
-import com.connection.http.TiposEventos
+import com.connection.http.HttpKMP
 import com.connection.http.User
-import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
-import io.ktor.server.cio.*
-import io.ktor.server.engine.*
-import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.install
+import io.ktor.server.cio.CIO
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveChannel
-import io.ktor.server.response.*
-import io.ktor.server.routing.*
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.routing
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.core.remaining
 import io.ktor.utils.io.readRemaining
 import io.ktor.utils.io.readText
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
@@ -33,14 +38,14 @@ import kotlin.time.ExperimentalTime
 
 
 class ServerHTTP(
-    private val portNumber: Int,
-    //private val scope: CoroutineScope,
-) {
+    val serverip: String,
+    val serverport: Int,
+    val servergetEndpoint: String = "sse",
+    val serverpostEndpoint: String = "command"
+) : HttpKMP(serverip, serverport, servergetEndpoint, serverpostEndpoint) {
 
     private var vv: MutableList<Flow<String>> = mutableListOf()
-    private var running = false
     private var users = mutableListOf<User>()
-
 
     private var eventsToSendFlow: MutableList<MutableSharedFlow<String>> = mutableListOf()
     fun addEventSharedFlow(eventReceivedFlow: MutableSharedFlow<String>) {
@@ -51,32 +56,11 @@ class ServerHTTP(
         eventsToSendFlow.add(eventReceivedFlow)
     }
 
-    private val lastState = MutableStateFlow<HttpProperties>(HttpProperties())
-    val lastStateFlow: SharedFlow<HttpProperties> = lastState
-
-
-    private var listeners = mutableListOf<HttpServerListener>()
-    fun addListener(listener: HttpServerListener) {
-        listeners.add(listener)
-    }
-
-    fun removeListener(listener: HttpServerListener) {
-
-        listeners.remove(listener)
-    }
 
     private fun onPost(msg: String) {
         lastState.update { it.copy(lastData = msg) }
         listeners.forEach { listener ->
-            listener.onPost(msg, portNumber)
-        }
-    }
-
-
-    private fun onConnected(connectionState: Boolean) {
-        lastState.update { it.copy(lastConnectionState = connectionState) }
-        listeners.forEach { listener ->
-            listener.onConnected(connectionState, portNumber)
+            (listener as HttpServerListener).onPost(msg, serverport)
         }
     }
 
@@ -84,7 +68,7 @@ class ServerHTTP(
     @OptIn(ExperimentalTime::class)
     private val instance by lazy {
 
-        embeddedServer(CIO, portNumber) {
+        embeddedServer(CIO, serverport) {
             //      embeddedServer(Netty, portNumber) {
 
             install(ContentNegotiation) {
@@ -117,7 +101,7 @@ class ServerHTTP(
                     }
                 }
 
-                post("/command") {
+                post("/$postEndpoint") {
                     try {
                         val command = call.receive<String>()
                         println("Received: ${command}")
@@ -129,7 +113,7 @@ class ServerHTTP(
                 }
 
 
-                get("/sse") {
+                get("/$getEndpoint") {
                     println("ENTRANDO NO SSE")
 
                     val heartBeatFlow: Flow<String> = flow {
@@ -163,7 +147,7 @@ class ServerHTTP(
                 }
 
 
-                get("/sse/{id}/{name}") {
+                get("/$getEndpoint/{id}/{name}") {
                     println("USER ${call.parameters["name"]} TENTANDO ENTRAR NO SSE")
                     var id: Int = 0
                     var name = ""
@@ -263,11 +247,10 @@ class ServerHTTP(
         }
     }
 
-    private val scope2 = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     fun runBlocking() {
         if (!running) {
-            scope2.launch {
+            customScope.launch {
                 instance.start(wait = true)
 //                running = false
 //                serverState.value = TiposConexao.Disconnected
@@ -276,7 +259,7 @@ class ServerHTTP(
     }
 
     fun stop() {
-        scope2.cancel()
+        customScope.cancel()
         instance.stop()
         running = false
 

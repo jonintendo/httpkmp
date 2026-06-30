@@ -4,7 +4,9 @@ package com.connection.http.client
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import com.connection.http.Header
+import com.connection.http.HttpKMP
 import com.connection.http.HttpProperties
+import com.connection.http.server.ServerHTTP
 
 
 import kotlinx.coroutines.CoroutineScope
@@ -47,51 +49,25 @@ import kotlin.time.ExperimentalTime
 
 
 class ClientHTTP(
-    private val ip: String,
-    private val port: Int,
-    private val endpoint: String,
-    //  private val scope: CoroutineScope,
-) {
+    val clientip: String,
+    val clientport: Int,
+    val clientgetEndpoint: String,
+    val clientpostEndpoint: String
+) : HttpKMP(clientip, clientport, clientgetEndpoint, clientpostEndpoint) {
 
-    private var running = false
-
-    var eventState = mutableStateOf("teste")
-    var addressSSE = mutableStateOf("http://$ip:$port/$endpoint")
-
-    private val lastState = MutableStateFlow<HttpProperties>(HttpProperties())
-    val lastStateFlow: SharedFlow<HttpProperties> = lastState
-
-    private var listeners = mutableListOf<HttpClientListener>()
-    fun addListener(listener: HttpClientListener) {
-        listeners.add(listener)
-    }
-
-    fun removeListener(listener: HttpClientListener) {
-        listeners.remove(listener)
-    }
 
     private fun onEventReceive(event: String) {
         lastState.update { it.copy(lastData = event) }
         listeners.forEach { listener ->
-            listener.onEventReceive(event, ip, port)
+            (listener as HttpClientListener).onEventReceive(event, ip, port)
         }
     }
-
-
-    private fun onConnected(connectionState: Boolean) {
-        lastState.update { it.copy(lastConnectionState = connectionState) }
-        listeners.forEach { listener ->
-            listener.onConnected(connectionState, ip, port)
-        }
-    }
-
-    private val scope2 = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
 
     fun start() {
         if (running)
             return
-        scope2.launch {
+        customScope.launch {
             try {
                 running = true
 
@@ -113,7 +89,7 @@ class ClientHTTP(
                     }
                 }
 
-                client.sse(urlString = addressSSE.value, showRetryEvents = true) {
+                client.sse(urlString = "http://$ip:$port/$getEndpoint", showRetryEvents = true) {
 //                    timeout {
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                    }
@@ -142,7 +118,7 @@ class ClientHTTP(
     fun stop() {
         if (running) {
             //eventSource.stop()
-            scope2.cancel()
+            customScope.cancel()
         }
     }
 
@@ -164,12 +140,12 @@ class ClientHTTP(
 //        }
 //    }
 
-    suspend fun get(getendpoint: String = ""): String? {
+    suspend fun get(): String? {
         try {
             //GET /navegacao/v1/rotas/[id] detalhes
             val deferredResult: Deferred<String> = coroutineScope {
                 async {
-                    get(url = "http://$ip:$port/$getendpoint")
+                    get(url = "http://$ip:$port/$getEndpoint")
                 }
             }
 
@@ -182,12 +158,12 @@ class ClientHTTP(
     }
 
 
-    suspend fun post(body: String, postendpoint: String = ""): String? {
+    suspend fun post(body: String): String? {
         try {
             //GET /navegacao/v1/rotas/[id] detalhes
             val deferredResult: Deferred<String> = coroutineScope {
                 async {
-                    post(body, url = "http://$ip:$port/$postendpoint")
+                    post(body, url = "http://$ip:$port/$postEndpoint")
                 }
             }
 
@@ -226,7 +202,7 @@ class ClientHTTP(
 
     fun startSendStream(source: String, streamendpoint: String, fps: Long) {
         inputStreamSender =
-            InputStreamSender(source, "http://$ip:$port/$streamendpoint", mapOf(), scope2)
+            InputStreamSender(source, "http://$ip:$port/$streamendpoint", mapOf(), customScope)
         inputStreamSender!!.startSend(fps)
     }
 
@@ -236,7 +212,7 @@ class ClientHTTP(
     }
 
     fun sendStream(source: String, value: String) {
-        scope2.launch {
+        customScope.launch {
             inputStreamSender?.setFrame(value)
         }
     }
