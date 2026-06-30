@@ -4,10 +4,8 @@ package com.connection.http.client
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import com.connection.http.Header
-import com.connection.http.SseEvent
-import com.connection.http.TiposComandos
-import com.connection.http.TiposConexao
-import com.connection.http.TiposEventos
+import com.connection.http.HttpProperties
+
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -43,6 +41,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.update
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -59,11 +58,8 @@ class ClientHTTP(
     var eventState = mutableStateOf("teste")
     var addressSSE = mutableStateOf("http://$ip:$port/$endpoint")
 
-
-    private val lastStateData = MutableStateFlow(TiposConexao.Disconnected)
-    var clientStateFlow: SharedFlow<TiposConexao> = lastStateData
-    private val lastEventData = MutableStateFlow<SseEvent>(SseEvent(TiposEventos.HTTP.name))
-    val eventFlow: SharedFlow<SseEvent> = lastEventData
+    private val lastState = MutableStateFlow<HttpProperties>(HttpProperties())
+    val lastStateFlow: SharedFlow<HttpProperties> = lastState
 
     private var listeners = mutableListOf<HttpClientListener>()
     fun addListener(listener: HttpClientListener) {
@@ -74,52 +70,32 @@ class ClientHTTP(
         listeners.remove(listener)
     }
 
-    private fun onEventReceive(event: SseEvent) {
-        lastEventData.value = event
+    private fun onEventReceive(event: String) {
+        lastState.update { it.copy(lastData = event) }
         listeners.forEach { listener ->
-            listener.onEventReceive(event)
+            listener.onEventReceive(event, ip, port)
         }
     }
 
 
-    private fun onConnected(connectionState: TiposConexao) {
-        lastStateData.value = connectionState
+    private fun onConnected(connectionState: Boolean) {
+        lastState.update { it.copy(lastConnectionState = connectionState) }
         listeners.forEach { listener ->
-            listener.onConnected(connectionState)
+            listener.onConnected(connectionState, ip, port)
         }
     }
-
-//    private fun onChangeConexionSSE(conexionState: TiposConexao) {
-//        listeners.forEach { listener ->
-//            listener.onChangeConexionSSE(conexionState)
-//        }
-//    }
-
-//
-//    private fun onReturnGet(response: String) {
-//        listeners.forEach { listener ->
-//            listener.onReturnGet(response)
-//        }
-//    }
-//
-//    private fun onReturnPost(response: String) {
-//        listeners.forEach { listener ->
-//            listener.onReturnPost(response)
-//        }
-//    }
-
 
     private val scope2 = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
 
-    fun listenCommandsUntilStopped() {
+    fun start() {
         if (running)
             return
         scope2.launch {
             try {
                 running = true
 
-                onConnected(TiposConexao.Connected)
+                onConnected(true)
                 val client = HttpClient {
                     install(HttpTimeout) {
 //                // Timeout for the entire request, from start to finish
@@ -142,7 +118,8 @@ class ClientHTTP(
 //                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
 //                    }
                     incoming.collect { event ->
-                        onEventReceive(SseEvent(event.event!!, event.data))
+                        // onEventReceive(SseEvent(event.event!!, event.data))
+                        onEventReceive(event.data!!)
                     }
                 }
             } catch (e: CancellationException) {
@@ -155,27 +132,9 @@ class ClientHTTP(
                 running = false
 
 
-                onConnected(TiposConexao.Disconnected)
+                onConnected(false)
             }
 
-        }
-    }
-
-
-    @OptIn(ExperimentalTime::class)
-    fun listenCommandsUntilStopped2(eventclient: MutableState<String>) {
-        if (running)
-            return
-        var autoCancelJob: Job? = null
-        running = true
-        var count = 0
-        scope2.launch {
-            while (running) {
-                eventclient.value = "${count++}"
-                eventState.value = "${count++}"
-                println("Running: ${Clock.System.now().epochSeconds}")
-                delay(500)
-            }
         }
     }
 
@@ -187,71 +146,81 @@ class ClientHTTP(
         }
     }
 
+//
+//    fun get() {
+//        scope2.launch {
+//            val client = HttpClient(CIO) {
+//                install(HttpTimeout)
+//            }
+//            val response: HttpResponse = client.get("http://$ip:$port") {
+//                timeout {
+//                    requestTimeoutMillis = 3000
+//                }
+//            }
+//
+//            println("Response status: ${response.status}")
+//            println("Response body: ${response.bodyAsText()}")
+//            client.close()
+//        }
+//    }
 
-    fun get(responseState: MutableState<String>) {
-        scope2.launch {
-            val client = HttpClient(CIO) {
-                install(HttpTimeout)
-            }
-            val response: HttpResponse = client.get("http://$ip:$port") {
-                timeout {
-                    requestTimeoutMillis = 3000
-                }
-            }
-            //val body: String = response.body()
-            responseState.value = response.bodyAsText()
-
-            println("Response status: ${response.status}")
-            println("Response body: ${response.bodyAsText()}")
-            client.close()
-        }
-    }
-
-    suspend fun getRotas() {
+    suspend fun get(getendpoint: String = ""): String? {
         try {
             //GET /navegacao/v1/rotas/[id] detalhes
             val deferredResult: Deferred<String> = coroutineScope {
                 async {
-                    ClientHTTP.get(
-                        "https://acquavia.acquaway.com/navegacao/v1/rotas/mapa", listOf(
-                            Header(
-                                "Authorization",
-                                "Apikey aGlkcmEtYXBpa2V5LjEuWWhYU3F3VWdVQlRBR0hZWDhlTjNIUDdoTllPYTJrWHU1cHdmNkxqMHBFYVFVU3k5bUhj"
-                            )
-                        )
-                    )
+                    get(url = "http://$ip:$port/$getendpoint")
                 }
             }
 
-            // detectRotasWayPoints(deferredResult.await())
+            return deferredResult.await()
             //faz o que precisar sincronamente
         } catch (ex: Exception) {
             println(ex.message)
+            return ex.message
         }
     }
 
 
-    fun post(request: String, postendpoint: String, responseState: MutableState<String>) =
-        scope2.launch {
-            val client = HttpClient(CIO) {
-                install(ContentNegotiation) {
-                    //gson()
-                    json()
+    suspend fun post(body: String, postendpoint: String = ""): String? {
+        try {
+            //GET /navegacao/v1/rotas/[id] detalhes
+            val deferredResult: Deferred<String> = coroutineScope {
+                async {
+                    post(body, url = "http://$ip:$port/$postendpoint")
                 }
-                install(HttpTimeout)
             }
 
-
-            val response: HttpResponse = client.post("http://$ip:$port/$postendpoint") {
-                contentType(ContentType.Application.Json)
-                setBody(request) // Ktor handles serialization
-            }
-            //val body: String = response.body()
-            responseState.value = response.bodyAsText()
-            println("Response status: ${response.status}")
-            println("Response body: ${response.bodyAsText()}")
-            client.close()
+            return deferredResult.await()
+            //faz o que precisar sincronamente
+        } catch (ex: Exception) {
+            println(ex.message)
+            return ex.message
         }
+    }
+
+
+//    fun post(request: String, postendpoint: String, responseState: MutableState<String>) =
+//        scope2.launch {
+//            val client = HttpClient(CIO) {
+//                install(ContentNegotiation) {
+//                    //gson()
+//                    json()
+//                }
+//                install(HttpTimeout)
+//            }
+//
+//
+//            val response: HttpResponse = client.post("http://$ip:$port/$postendpoint") {
+//                contentType(ContentType.Application.Json)
+//                setBody(request) // Ktor handles serialization
+//            }
+//            //val body: String = response.body()
+//            responseState.value = response.bodyAsText()
+//            println("Response status: ${response.status}")
+//            println("Response body: ${response.bodyAsText()}")
+//            client.close()
+//        }
 
     private var inputStreamSender: InputStreamSender? = null
 
@@ -274,8 +243,7 @@ class ClientHTTP(
 
     companion object {
 
-
-        suspend fun get(url: String, headers: List<Header>): String {
+        suspend fun get(url: String, headers: List<Header> = mutableListOf()): String {
 
             //  scope1.launch {
             val client = HttpClient(CIO) {
@@ -301,7 +269,11 @@ class ClientHTTP(
             //  }
         }
 
-        suspend fun post(command: String, url: String, headers: List<Header>): String {
+        suspend fun post(
+            body: String,
+            url: String,
+            headers: List<Header> = mutableListOf<Header>()
+        ): String {
 
             val client = HttpClient(CIO) {
                 install(ContentNegotiation) {
@@ -313,7 +285,7 @@ class ClientHTTP(
 
             val response: HttpResponse = client.post(url) {
                 contentType(ContentType.Application.Json)
-                setBody(command) // Ktor handles serialization
+                setBody(body) // Ktor handles serialization
                 headers {
                     headers.forEach { header ->
                         append(header.key, header.value)

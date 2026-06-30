@@ -1,10 +1,10 @@
 package com.connection.http.server
 
 import com.connection.http.HttpListener
-import com.connection.http.TiposComandos
-import com.connection.http.TiposConexao
 
 
-interface HttpServerListener: HttpListener {
-    fun onPostCommand(command: String)
+
+interface HttpServerListener : HttpListener {
+    fun onPost(msg: String, port: Int)
+    fun onConnected(connectionState: Boolean, port: Int)
 }

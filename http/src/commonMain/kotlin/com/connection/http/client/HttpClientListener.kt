@@ -1,10 +1,10 @@
 package com.connection.http.client
 
 import com.connection.http.HttpListener
-import com.connection.http.SseEvent
-import com.connection.http.server.HttpServerListener
 
 
-interface HttpClientListener: HttpListener {
-    fun onEventReceive(event: SseEvent)
+
+interface HttpClientListener : HttpListener {
+    fun onEventReceive(event: String, ip: String, port: Int)
+    fun onConnected(connectionState: Boolean, ip: String, port: Int)
 }
