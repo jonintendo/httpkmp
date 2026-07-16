@@ -94,26 +94,25 @@ kotlin {
         androidMain {
             dependencies {
                 //implementation(libs.ktor.serverNetty)
+                implementation(libs.ktor.client.okhttp)
+
             }
         }
 
-        getByName("androidDeviceTest") {
-            dependencies {
-                implementation(libs.androidx.runner)
-                implementation(libs.androidx.core)
-                implementation(libs.androidx.testExt.junit)
-            }
-        }
+
 
         iosMain {
             dependencies {
-                //implementation(libs.ktor.server.darwin)
+                implementation(libs.ktor.client.darwin)
             }
         }
         jvmMain {
             dependencies{
                 //implementation(libs.ktor.serverNetty)
                 implementation(libs.ktor.serverCore.jvm)
+                implementation(libs.ktor.client.java)
+                implementation(libs.ktor.client.apache)
+
             }
         }
     }
