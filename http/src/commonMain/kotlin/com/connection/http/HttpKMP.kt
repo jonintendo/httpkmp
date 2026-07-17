@@ -16,7 +16,7 @@ open class HttpKMP(
     val ip: String,
     val port: Int,
     val getEndpoint: String,
-    val postEndpoint: String
+    val postEndpoint: String,
 ) {
     protected val lastState = MutableStateFlow<HttpProperties>(HttpProperties())
     val lastStateFlow: SharedFlow<HttpProperties> = lastState

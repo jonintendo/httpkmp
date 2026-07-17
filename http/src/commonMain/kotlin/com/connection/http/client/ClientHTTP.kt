@@ -39,7 +39,8 @@ open class ClientHTTP(
     val clientport: Int,
     val clientgetEndpoint: String,
     val clientpostEndpoint: String,
-    val optionalHeaders: List<Header>
+    val optionalHeaders: List<Header>,
+    val cert: String?
 ) : HttpKMP(clientip, clientport, clientgetEndpoint, clientpostEndpoint) {
 
 
@@ -50,19 +51,14 @@ open class ClientHTTP(
         }
     }
 
-    open fun startSSE(cert: String? = null) {
-
-    }
 
     fun start() {
         if (running)
             return
         customScope.launch {
             try {
-                running = true
 
-                onConnected(true)
-                val client = HttpClient(CIO) {
+                val client = if (cert != null) client(cert) else HttpClient(CIO) {
 
                     install(SSE) {
                         reconnectionTime = 3.seconds
@@ -80,23 +76,21 @@ open class ClientHTTP(
                     }
                 }
 
-
                 client.sse(
                     urlString = "$ip:$port/$getEndpoint",
                     showRetryEvents = true,
                     request = {
                         // Add your custom request headers here
                         optionalHeaders.forEach { optionalHeader ->
-                            header(optionalHeader.key, optionalHeader.key)
+                            header(optionalHeader.key, optionalHeader.value)
                         }
                     }
                 ) {
-//                    timeout {
-//                        requestTimeoutMillis = INFINITE_TIMEOUT_MS
-//                    }
+                    running = true
+                    onConnected(true)
                     incoming.collect { event ->
                         // onEventReceive(SseEvent(event.event!!, event.data))
-                        onEventReceive(event.data!!)
+                        onEventReceive(event.data.toString())
                     }
                 }
             } catch (e: CancellationException) {
@@ -121,30 +115,13 @@ open class ClientHTTP(
         }
     }
 
-//
-//    fun get() {
-//        scope2.launch {
-//            val client = HttpClient(CIO) {
-//                install(HttpTimeout)
-//            }
-//            val response: HttpResponse = client.get("$ip:$port") {
-//                timeout {
-//                    requestTimeoutMillis = 3000
-//                }
-//            }
-//
-//            println("Response status: ${response.status}")
-//            println("Response body: ${response.bodyAsText()}")
-//            client.close()
-//        }
-//    }
 
     suspend fun get(): String? {
         try {
             //GET /navegacao/v1/rotas/[id] detalhes
             val deferredResult: Deferred<String> = coroutineScope {
                 async {
-                    get(url = "$ip:$port/$getEndpoint", optionalHeaders)
+                    get(url = "$ip:$port/$getEndpoint", optionalHeaders, cert)
                 }
             }
 
@@ -162,7 +139,7 @@ open class ClientHTTP(
             //GET /navegacao/v1/rotas/[id] detalhes
             val deferredResult: Deferred<String> = coroutineScope {
                 async {
-                    post(body, url = "$ip:$port/$postEndpoint", optionalHeaders)
+                    post(body, url = "$ip:$port/$postEndpoint", optionalHeaders, cert)
                 }
             }
 
@@ -174,28 +151,6 @@ open class ClientHTTP(
         }
     }
 
-
-//    fun post(request: String, postendpoint: String, responseState: MutableState<String>) =
-//        scope2.launch {
-//            val client = HttpClient(CIO) {
-//                install(ContentNegotiation) {
-//                    //gson()
-//                    json()
-//                }
-//                install(HttpTimeout)
-//            }
-//
-//
-//            val response: HttpResponse = client.post("$ip:$port/$postendpoint") {
-//                contentType(ContentType.Application.Json)
-//                setBody(request) // Ktor handles serialization
-//            }
-//            //val body: String = response.body()
-//            responseState.value = response.bodyAsText()
-//            println("Response status: ${response.status}")
-//            println("Response body: ${response.bodyAsText()}")
-//            client.close()
-//        }
 
     private var inputStreamSender: InputStreamSender? = null
 
@@ -216,14 +171,24 @@ open class ClientHTTP(
         }
     }
 
+
     companion object {
 
-        suspend fun get(url: String, headers: List<Header> = mutableListOf()): String {
+        suspend fun get(
+            url: String,
+            headers: List<Header> = mutableListOf(),
+            cert: String? = null
+        ): String {
 
             //  scope1.launch {
-            val client = HttpClient(CIO) {
+//            val client = HttpClient(CIO) {
+//                install(HttpTimeout)
+//            }
+
+            val client = if (cert != null) client(cert) else HttpClient(CIO) {
                 install(HttpTimeout)
             }
+
             val response: HttpResponse = client.get(url) {
                 timeout {
                     requestTimeoutMillis = 3000
@@ -247,10 +212,11 @@ open class ClientHTTP(
         suspend fun post(
             body: String,
             url: String,
-            headers: List<Header> = mutableListOf<Header>()
+            headers: List<Header> = mutableListOf<Header>(),
+            cert: String? = null
         ): String {
 
-            val client = HttpClient(CIO) {
+            val client = if (cert != null) client(cert) else HttpClient(CIO) {
                 install(ContentNegotiation) {
                     //gson()
                     json()
@@ -282,10 +248,12 @@ open class ClientHTTP(
 
 }
 
-expect fun getClientHTTP(
-    clientip: String,
-    clientport: Int,
-    clientgetEndpoint: String,
-    clientpostEndpoint: String,
-    optionalHeaders: List<Header>
-): ClientHTTP
+//expect fun getClientHTTP(
+//    clientip: String,
+//    clientport: Int,
+//    clientgetEndpoint: String,
+//    clientpostEndpoint: String,
+//    optionalHeaders: List<Header>
+//): ClientHTTP
+
+expect fun client(cert: String?): HttpClient
