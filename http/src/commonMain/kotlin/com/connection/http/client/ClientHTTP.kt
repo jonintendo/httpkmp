@@ -55,6 +55,7 @@ open class ClientHTTP(
     fun start() {
         if (running)
             return
+
         customScope.launch {
             try {
 
@@ -63,16 +64,6 @@ open class ClientHTTP(
                     install(SSE) {
                         reconnectionTime = 3.seconds
                         maxReconnectionAttempts = 5
-                    }
-
-                    engine {
-
-                        https {
-                            // Set explicit TLS version (e.g., TLS 1.2)
-
-                            // addProtocol(TLSVersion.TLS12)
-                            CIOCipherSuites.SupportedSuites
-                        }
                     }
                 }
 

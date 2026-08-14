@@ -64,10 +64,14 @@ class ServerHTTP(
         }
     }
 
+    private var nativeEventToSend = MutableSharedFlow<String>(1)
+    private fun send(byteArray: ByteArray) {
+        nativeEventToSend.tryEmit(byteArray.decodeToString())
+    }
 
     @OptIn(ExperimentalTime::class)
     private val instance by lazy {
-
+        addEventSharedFlow(nativeEventToSend)
         embeddedServer(CIO, serverport) {
             //      embeddedServer(Netty, portNumber) {
 
