@@ -8,6 +8,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -18,39 +20,27 @@ open class HttpKMP(
     val getEndpoint: String,
     val postEndpoint: String,
 ) {
-    protected val lastState = MutableStateFlow<HttpProperties>(HttpProperties())
-    val lastStateFlow: SharedFlow<HttpProperties> = lastState
 
+    protected val lastStatus = MutableStateFlow(HttpStatus())
+    val lastStatusFlow = lastStatus.asStateFlow()
 
-    protected var listeners = mutableListOf<HttpListener>()
-    fun addListener(listener: HttpListener) {
-        listeners.add(listener)
+    protected val lastNotification = MutableSharedFlow<HttpNotification>()
+    val lastNotificationFlow = lastNotification.asSharedFlow()
+
+    protected val lastData = MutableStateFlow<String>("")
+    val lastDataFlow = lastData.asStateFlow()
+
+    protected fun onConnected(connectedd: Boolean) {
+        lastStatus.update { it.copy(connected = connectedd) }
     }
 
-    fun removeListener(listener: HttpListener) {
-        listeners.remove(listener)
-    }
-
-
-    protected fun onConnected(connected: Boolean) {
-        lastState.update { it.copy(lastConnectionState = connected) }
-        listeners.forEach { listener ->
-            listener.onHttpConnected(connected, ip, port)
-        }
+    protected fun onData(msg: String) {
+        lastData.update { msg }
     }
 
     protected fun onError(msg: String) {
-        lastState.update { it.copy(lastError = msg) }
-        listeners.forEach { listener ->
-            listener.onHttpError(msg, ip, port)
-        }
+        lastNotification.tryEmit(HttpNotification(TypeNotification.Error, msg))
     }
-
-
-    var byteArraySocketFlow = MutableSharedFlow<ByteArray>(
-        extraBufferCapacity = 1
-    )
-
 
 
     protected var myJob: Job? = null

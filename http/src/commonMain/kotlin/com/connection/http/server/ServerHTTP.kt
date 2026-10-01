@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
 
@@ -56,13 +57,6 @@ class ServerHTTP(
         eventsToSendFlow.add(eventReceivedFlow)
     }
 
-
-    private fun onPost(msg: String) {
-        lastState.update { it.copy(lastData = msg) }
-        listeners.forEach { listener ->
-            (listener as HttpServerListener).onPost(msg, serverport)
-        }
-    }
 
     private var nativeEventToSend = MutableSharedFlow<String>(1)
     private fun send(byteArray: ByteArray) {
@@ -109,7 +103,7 @@ class ServerHTTP(
                     try {
                         val command = call.receive<String>()
                         println("Received: ${command}")
-                        onPost(command)
+                        onData(command)
                         call.respond(HttpStatusCode.Created, "Command ${command} received")
                     } catch (e: Exception) {
                         call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
@@ -123,7 +117,7 @@ class ServerHTTP(
                     val heartBeatFlow: Flow<String> = flow {
                         while (true) {
                             emit("Running: ${Clock.System.now().epochSeconds}")
-                            delay(25_000)
+                            delay(25_000.milliseconds)
                         }
                     }
 

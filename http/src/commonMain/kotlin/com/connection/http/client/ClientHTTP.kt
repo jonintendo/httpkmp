@@ -44,14 +44,6 @@ open class ClientHTTP(
 ) : HttpKMP(clientip, clientport, clientgetEndpoint, clientpostEndpoint) {
 
 
-    protected fun onEventReceive(event: String) {
-        lastState.update { it.copy(lastData = event) }
-        listeners.forEach { listener ->
-            (listener as HttpClientListener).onEventReceive(event, ip, port)
-        }
-    }
-
-
     fun start() {
         if (running)
             return
@@ -81,15 +73,14 @@ open class ClientHTTP(
                     onConnected(true)
                     incoming.collect { event ->
                         // onEventReceive(SseEvent(event.event!!, event.data))
-                        onEventReceive(event.data.toString())
+                        onData(event.data.toString())
                     }
                 }
             } catch (e: CancellationException) {
                 println("SSE desconectado ${e.message}")
+                onError("SSE desconectado ${e.message}")
             } catch (e: Exception) {
-                // Handle other exceptions
-                // e.printStackTrace()
-                println(e.message)
+                onError(e.message.toString())
             } finally {
                 running = false
                 onConnected(false)
@@ -119,7 +110,7 @@ open class ClientHTTP(
             return deferredResult.await()
             //faz o que precisar sincronamente
         } catch (ex: Exception) {
-            println(ex.message)
+            onError(ex.message.toString())
             return ex.message
         }
     }
@@ -133,11 +124,10 @@ open class ClientHTTP(
                     post(body, url = "$ip:$port/$postEndpoint", optionalHeaders, cert)
                 }
             }
-
             return deferredResult.await()
             //faz o que precisar sincronamente
         } catch (ex: Exception) {
-            println(ex.message)
+            onError(ex.message.toString())
             return ex.message
         }
     }
