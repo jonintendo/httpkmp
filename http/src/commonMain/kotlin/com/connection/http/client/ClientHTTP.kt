@@ -158,7 +158,8 @@ open class ClientHTTP(
         suspend fun get(
             url: String,
             headers: List<Header> = mutableListOf(),
-            cert: String? = null
+            cert: String? = null,
+            timeOut: Long? = null
         ): String {
 
             //  scope1.launch {
@@ -172,7 +173,7 @@ open class ClientHTTP(
 
             val response: HttpResponse = client.get(url) {
                 timeout {
-                    requestTimeoutMillis = 3000
+                    requestTimeoutMillis = timeOut
                 }
                 headers {
                     headers.forEach { header ->
