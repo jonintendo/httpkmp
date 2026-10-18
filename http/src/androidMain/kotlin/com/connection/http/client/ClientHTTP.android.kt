@@ -66,7 +66,7 @@ actual fun client(cert: String?) = HttpClient(OkHttp) {
 
             if (cert != null) {
                 try {
-                    println(cert)
+                  //  println(cert)
                     val certInputStream = cert.byteInputStream()
                     val trustManager = getTrustManager(certInputStream)
                     val sslContext = SSLContext.getInstance("TLSv1.3").apply {
